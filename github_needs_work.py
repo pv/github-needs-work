@@ -21,7 +21,6 @@ import collections
 import argparse
 import tempita
 import tempfile
-import gzip
 
 from urllib2 import urlopen, Request
 
@@ -226,7 +225,7 @@ class CachedGet(object):
         if os.path.isfile(filename):
             print("[gh] using {0} as cache (remove it if you want fresh data)".format(filename),
                   file=sys.stderr)
-            with gzip.open(filename, 'rb') as f:
+            with open(filename, 'r') as f:
                 self.cache = json.load(f)
         else:
             self.cache = {}
@@ -329,10 +328,11 @@ class CachedGet(object):
         return self.cache[url]
 
     def save(self):
+        print("[gh] saving cache...", file=sys.stderr)
         fd, tmp = tempfile.mkstemp(prefix=os.path.basename(self.filename) + '.new-',
                                    dir=os.path.dirname(self.filename))
         os.close(fd)
-        with gzip.open(tmp, 'w', 1) as f:
+        with open(tmp, 'w') as f:
             json.dump(self.cache, f)
         os.rename(tmp, self.filename)
 
