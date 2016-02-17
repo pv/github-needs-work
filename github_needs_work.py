@@ -3,8 +3,9 @@
 """
 github_needs_work.py
 
-Print pull requests in Github which have needs-work label despite having
-updated commits.
+Print pull requests in Github which have needs-work label despite
+having updated commits. Creates a cache file ``gh_cache.json.gz`` in
+the current directory.
 
 """
 from __future__ import print_function, division, absolute_import
@@ -32,7 +33,7 @@ HTML_TEMPLATE = """\
 </head>
 <body>
   <h1>Project <a href="https://github.com/{{project}}/pulls">{{project}}</a></h1>
-  <h2>Pull requests with new commits and older needs-work tag</h2>
+  <h2>Pull requests with new commits and older needs-work label</h2>
   <ul>
   {{for pull in backlog}}
     <li><a href="{{pull['html_url']}}">gh-{{pull['number']}}</a>: {{pull['title']}}</li>
