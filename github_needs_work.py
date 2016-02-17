@@ -127,6 +127,9 @@ def process(pull_cache, project):
         needs_work = any(label['name'] == 'needs-work' for label in pull['labels'])
         needs_decision = any(label['name'] == 'needs-decision' for label in pull['labels'])
 
+        if pull['title'].startswith('WIP'):
+            needs_work = True
+
         labelings = [event for event in pull['events']
                      if event['event'] == 'labeled' and event['label']['name'] == 'needs-work']
         if labelings:
