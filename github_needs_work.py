@@ -124,7 +124,7 @@ def process(getter, project):
 
 
 def get_pulls_cached(getter, project):
-    initial = not getter.cache:
+    initial = not getter.cache
 
     getter.info.setdefault('last_updated', '1970-1-1T00:00:00Z')
 
