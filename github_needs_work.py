@@ -87,7 +87,9 @@ def process(getter, project):
     needs_review = []
     other = []
 
-    for pull in sorted(pulls.values(), key=lambda x: -x['number']):
+    for pull in sorted(pulls.values(),
+                       key=lambda x: parse_time(x['created_at']),
+                       reverse=True):
         if pull['state'] != 'open':
             continue
 
@@ -148,10 +150,12 @@ def get_pulls_cached(getter, project):
 
     # Update pulls
     for pull in old_pulls:
-        if pull['number'] not in pulls:
-            pulls[pull['number']] = pull
+        k = u"{0}".format(pull['number'])
+        if k not in pulls:
+            pulls[k] = pull
     for pull in new_pulls:
-        pulls[pull['number']] = pull
+        k = u"{0}".format(pull['number'])
+        pulls[k] = pull
 
     # Save
     getter.info['pulls'] = pulls
