@@ -32,6 +32,7 @@ HTML_TEMPLATE = """\
 </head>
 <body>
   <h1>Project <a href="https://github.com/{{project}}/pulls">{{project}}</a></h1>
+  <p>Updated {{date}}</p>
   <h2>Pull requests with new commits and older needs-work label</h2>
   <ul>
   {{for pull in backlog}}
@@ -135,7 +136,9 @@ def process(getter, project):
               needs_review=needs_review,
               decision=decision,
               other=other,
-              project=project)
+              project=project,
+              date=datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+              )
     t = tempita.Template(HTML_TEMPLATE)
     print(t.substitute(ns))
 
