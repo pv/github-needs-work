@@ -32,13 +32,31 @@ HTML_TEMPLATE = """\
 </head>
 <body>
   <h1>Project <a href="https://github.com/{{project}}/pulls">{{project}}</a></h1>
-  <h2>Pull requests with needs-work tag, but with new commits</h2>
+  <h2>Pull requests with new commits and older needs-work tag</h2>
   <ul>
-  {{for pull in pulls}}
+  {{for pull in backlog}}
     <li><a href="{{pull['html_url']}}">gh-{{pull['number']}}</a>: {{pull['title']}}</li>
   {{endfor}}
-  {{if not pulls}}
-    <li>No pull requests in backlog!</li>
+  {{if not backlog}}
+    <li>No such pull requests</li>
+  {{endif}}
+  </ul>
+  <h2>Pull requests needing review</h2>
+  <ul>
+  {{for pull in needs_review}}
+    <li><a href="{{pull['html_url']}}">gh-{{pull['number']}}</a>: {{pull['title']}}</li>
+  {{endfor}}
+  {{if not needs_review}}
+    <li>No such pull requests</li>
+  {{endif}}
+  </ul>
+  <h2>Other pull requests</h2>
+  <ul>
+  {{for pull in other}}
+    <li><a href="{{pull['html_url']}}">gh-{{pull['number']}}</a>: {{pull['title']}}</li>
+  {{endfor}}
+  {{if not other}}
+    <li>No such pull requests</li>
   {{endif}}
   </ul>
 </body>
@@ -65,29 +83,42 @@ def process(getter, project):
     pulls = get_pulls_cached(getter, project)
         
     backlog = []
+    needs_review = []
+    other = []
 
-    pulls.sort(key=lambda x: x['number'])
-
-    for pull in pulls:
-        if not any(label['name'] == 'needs-work' for label in pull['labels']):
+    for pull in sorted(pulls.values(), key=lambda x: -x['number']):
+        if pull['state'] != 'open':
             continue
 
-        labelings = [event for event in pull['events']
-                     if event['event'] == 'labeled' and event['label']['name'] == 'needs-work']
-        if not labelings:
-            continue
         if not pull['commits']:
             continue
 
-        last_label_date = max(parse_time(event['created_at']) for event in labelings)
+        needs_work = any(label['name'] == 'needs-work' for label in pull['labels'])
+
+        labelings = [event for event in pull['events']
+                     if event['event'] == 'labeled' and event['label']['name'] == 'needs-work']
+        if labelings:
+            needs_work_label_date = max(parse_time(event['created_at']) for event in labelings)
+        else:
+            needs_work_label_date = None
+            
         last_commit_date = max(max(parse_time(commit['commit']['author']['date']),
                                    parse_time(commit['commit']['committer']['date']))
                                for commit in pull['commits'])
 
-        if last_commit_date > last_label_date:
+        if (needs_work and
+                needs_work_label_date is not None and
+                last_commit_date > needs_work_label_date):
             backlog.append(pull)
+        elif not needs_work:
+            needs_review.append(pull)
+        else:
+            other.append(pull)
 
-    ns = dict(pulls=backlog, project=project)
+    ns = dict(backlog=backlog,
+              needs_review=needs_review,
+              other=other,
+              project=project)
     t = tempita.Template(HTML_TEMPLATE)
     print(t.substitute(ns))
 
@@ -95,36 +126,42 @@ def process(getter, project):
 def get_pulls_cached(getter, project):
     getter.info.setdefault('last_updated', '1970-1-1T00:00:00Z')
 
+    pulls = getter.info.get('pulls', {})
+
     # Get old pull requests (may be cached)
-    pulls = get_pulls_needs_work(getter, project, parse_time('1970-1-1T00:00:00Z'),
-                                 labeled=True)
+    old_pulls = get_pulls(getter, project, parse_time('1970-1-1T00:00:00Z'),
+                          only_open=True)
 
     # Get new pull requests (update cached ones)
     new_update_time = datetime.datetime.utcnow()
-    new_pulls = get_pulls_needs_work(getter, project, parse_time(getter.info['last_updated']),
-                                     cache=False, labeled=False)
+    new_pulls = get_pulls(getter, project, parse_time(getter.info['last_updated']),
+                          cache=False, only_open=False)
 
     # Update update time
     getter.info['last_updated'] = format_time(new_update_time)
 
     # Update pulls
-    new_pull_dict = dict((pull['number'], pull) for pull in new_pulls)
+    for pull in old_pulls:
+        if pull['number'] not in pulls:
+            pulls[pull['number']] = pull
+    for pull in new_pulls:
+        pulls[pull['number']] = pull
 
-    for j in range(len(pulls)):
-        pulls[j] = new_pull_dict.pop(pulls[j]['number'], pulls[j])
+    # Save
+    getter.info['pulls'] = pulls
 
-    pulls.extend(new_pull_dict.values())
     return pulls
 
 
-def get_pulls_needs_work(getter, project, since, cache=True, labeled=True):
-    url = "https://api.github.com/repos/{project}/issues?state=open&sort=updated&direction=desc&since={since}"
-    if labeled:
-        url += "&labels=needs-work"
+def get_pulls(getter, project, since, cache=True, only_open=False):
+    url = "https://api.github.com/repos/{project}/issues?sort=updated&direction=desc&since={since}"
+    if only_open:
+        url += "&state=open"
     url = url.format(project=project, since=format_time(since))
 
     data = getter.get_multipage(url, cache=cache)
-    pulls = [pull for pull in data if pull.get('pull_request')]
+    pulls = [pull for pull in data
+             if pull.get('pull_request') and pull.get('state') == 'open']
 
     for pull in pulls:
         data, info = getter.get(pull['events_url'], cache=cache)
