@@ -4,10 +4,10 @@ github-needs-work
 
 ::
 
-    usage: github_needs_work.py
+    github_needs_work.py
 
     Print pull requests in Github which have needs-work label despite
-    having updated commits. Creates a cache file ``gh_cache.json.gz`` in
+    having updated commits. Creates a cache file ``gh_cache.json`` in
     the current directory.
 
     optional arguments:
