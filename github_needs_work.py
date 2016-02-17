@@ -87,13 +87,21 @@ def main():
                    help="Authenticate to Github (increases rate limits)")
     args = p.parse_args()
 
-    with LockFile('gh_cache.json.lock'):
-        getter = GithubGet(auth=args.auth)
-        pull_cache = PullCache('gh_cache.json', args.project, getter)
+    lock = LockFile('gh_cache.json.lock')
+
+    if lock.acquire(block=False):
         try:
-            process(pull_cache, args.project)
+            getter = GithubGet(auth=args.auth)
+            pull_cache = PullCache('gh_cache.json', args.project, getter)
+            try:
+                process(pull_cache, args.project)
+            finally:
+                pull_cache.save()
         finally:
-            pull_cache.save()
+            lock.release()
+    else:
+        print("Another process already running")
+        return 1
 
     return 0
 
@@ -291,7 +299,7 @@ class GithubGet(object):
     def urlopen(self, url, auth=None):
         assert url.startswith('https://')
         req = Request(url, headers=self.headers)
-        return urlopen(req)
+        return urlopen(req, timeout=60)
 
     def get_multipage(self, url):
         data = []
