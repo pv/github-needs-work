@@ -4,7 +4,7 @@
 github_needs_work.py
 
 Print pull requests in Github which have needs-work label despite
-having updated commits. Creates a cache file ``gh_cache.json.gz`` in
+having updated commits. Creates a cache file ``gh_cache.json`` in
 the current directory.
 
 """
@@ -70,7 +70,7 @@ def main():
                    help="Authenticate to Github (increases rate limits)")
     args = p.parse_args()
 
-    getter = CachedGet('gh_cache.json.gz', auth=args.auth)
+    getter = CachedGet('gh_cache.json', auth=args.auth)
     try:
         process(getter, args.project)
     finally:
@@ -124,6 +124,9 @@ def process(getter, project):
 
 
 def get_pulls_cached(getter, project):
+    if not getter.cache:
+        initial = True
+
     getter.info.setdefault('last_updated', '1970-1-1T00:00:00Z')
 
     pulls = getter.info.get('pulls', {})
@@ -134,8 +137,11 @@ def get_pulls_cached(getter, project):
 
     # Get new pull requests (update cached ones)
     new_update_time = datetime.datetime.utcnow()
-    new_pulls = get_pulls(getter, project, parse_time(getter.info['last_updated']),
-                          cache=False, only_open=False)
+    if initial:
+        new_pulls = {}
+    else:
+        new_pulls = get_pulls(getter, project, parse_time(getter.info['last_updated']),
+                              cache=False, only_open=False)
 
     # Update update time
     getter.info['last_updated'] = format_time(new_update_time)
