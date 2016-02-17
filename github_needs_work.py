@@ -22,7 +22,7 @@ import argparse
 import tempita
 import tempfile
 
-from urllib2 import urlopen, Request
+from urllib2 import urlopen, Request, HTTPError
 
 HTML_TEMPLATE = """\
 <!DOCTYPE html>
@@ -85,24 +85,26 @@ def main():
     args = p.parse_args()
 
     with LockFile('gh_cache.json.lock'):
-        getter = CachedGet('gh_cache.json', auth=args.auth)
+        getter = GithubGet(auth=args.auth)
+        pull_cache = PullCache('gh_cache.json', args.project, getter)
         try:
-            process(getter, args.project)
+            process(pull_cache, args.project)
         finally:
-            getter.save()
+            pull_cache.save()
 
     return 0
 
 
-def process(getter, project):
-    pulls = get_pulls_cached(getter, project)
-        
+def process(pull_cache, project):
+    pull_cache.update()
+    pulls = pull_cache.values()
+
     backlog = []
     needs_review = []
     decision = []
     other = []
 
-    for pull in sorted(pulls.values(),
+    for pull in sorted(pulls,
                        key=lambda x: parse_time(x['created_at']),
                        reverse=True):
         if pull['state'] != 'open':
@@ -145,68 +147,6 @@ def process(getter, project):
               )
     t = tempita.Template(HTML_TEMPLATE)
     print(t.substitute(ns))
-
-
-def get_pulls_cached(getter, project):
-    initial = not getter.cache
-
-    getter.info.setdefault('last_updated', '1970-1-1T00:00:00Z')
-
-    pulls = getter.info.get('pulls', {})
-
-    # Get old pull requests (may be cached)
-    old_pulls = get_pulls(getter, project, parse_time('1970-1-1T00:00:00Z'),
-                          only_open=True)
-
-    # Get new pull requests (update cached ones)
-    new_update_time = datetime.datetime.utcnow()
-    if initial:
-        new_pulls = {}
-    else:
-        new_pulls = get_pulls(getter, project, parse_time(getter.info['last_updated']),
-                              cache=False, only_open=False)
-
-    # Update update time
-    getter.info['last_updated'] = format_time(new_update_time)
-
-    # Update pulls
-    for pull in old_pulls:
-        k = u"{0}".format(pull['number'])
-        if k not in pulls:
-            pulls[k] = pull
-    for pull in new_pulls:
-        k = u"{0}".format(pull['number'])
-        pulls[k] = pull
-
-    # Save
-    getter.info['pulls'] = pulls
-
-    return pulls
-
-
-def get_pulls(getter, project, since, cache=True, only_open=False):
-    url = "https://api.github.com/repos/{project}/issues?sort=updated&direction=desc&since={since}"
-    if only_open:
-        url += "&state=open"
-    else:
-        url += "&state=all"
-    url = url.format(project=project, since=format_time(since))
-
-    data = getter.get_multipage(url, cache=cache)
-    pulls = [pull for pull in data if pull.get('pull_request')]
-
-    for pull in pulls:
-        if pull.get('state') != 'open':
-            continue
-
-        data, info = getter.get(pull['events_url'], cache=cache)
-        pull[u'events'] = data
-
-        commits_url = pull['pull_request']['url'] + '/commits'
-        data, info = getter.get(commits_url, cache=cache)
-        pull[u'commits'] = data
-
-    return pulls
 
 
 def format_time(d):
@@ -254,9 +194,12 @@ def parse_time(s):
     raise ValueError("Failed to parse date %r" % s)
 
 
-class CachedGet(object):
-    def __init__(self, filename, auth=False):
+class PullCache(object):
+    def __init__(self, filename, project, getter):
         self.filename = filename
+        self.project = project
+        self.getter = getter
+
         if os.path.isfile(filename):
             print("[gh] using {0} as cache (remove it if you want fresh data)".format(filename),
                   file=sys.stderr)
@@ -265,6 +208,59 @@ class CachedGet(object):
         else:
             self.cache = {}
 
+    def values(self):
+        return self.cache['pulls'].values()
+
+    def update(self):
+        self.cache.setdefault('last_updated', '1970-1-1T00:00:00Z')
+
+        pulls = self.cache.get('pulls', {})
+
+        # Get changed pull requests
+        prev_time = parse_time(self.cache['last_updated'])
+        new_time = datetime.datetime.utcnow()
+        new_pulls = self._get(prev_time)
+        self.cache['last_updated'] = format_time(new_time)
+
+        # Update pulls
+        for pull in new_pulls:
+            k = u"{0}".format(pull['number'])
+            pulls[k] = pull
+
+        return pulls
+
+    def _get(self, since):
+        url = "https://api.github.com/repos/{project}/issues?sort=updated&direction=desc&since={since}&state=all"
+        url = url.format(project=self.project, since=format_time(since))
+
+        data = self.getter.get_multipage(url)
+        pulls = [pull for pull in data if pull.get('pull_request')]
+
+        for pull in pulls:
+            if pull.get('state') != 'open':
+                continue
+
+            data, info = self.getter.get(pull['events_url'])
+            pull[u'events'] = data
+
+            commits_url = pull['pull_request']['url'] + '/commits'
+            data, info = self.getter.get(commits_url)
+            pull[u'commits'] = data
+
+        return pulls
+
+    def save(self):
+        print("[gh] saving cache...", file=sys.stderr)
+        fd, tmp = tempfile.mkstemp(prefix=os.path.basename(self.filename) + '.new-',
+                                   dir=os.path.dirname(self.filename))
+        os.close(fd)
+        with open(tmp, 'w') as f:
+            json.dump(self.cache, f)
+        os.rename(tmp, self.filename)
+
+
+class GithubGet(object):
+    def __init__(self, auth=False):
         self.headers = {'User-Agent': 'github_needs_work.py'}
 
         if auth:
@@ -295,81 +291,69 @@ class CachedGet(object):
         req = Request(url, headers=self.headers)
         return urlopen(req)
 
-    @property
-    def info(self):
-        return self.cache.setdefault('info', {})
-
-    def get_multipage(self, url, cache=True):
+    def get_multipage(self, url):
         data = []
         while url:
-            page_data, info = self.get(url, cache=cache)
+            page_data, info = self.get(url)
             data += page_data
             url = info['next']
         return data
 
-    def get(self, url, cache=True):
+    def get(self, url):
         url = unicode(url)
-        if url not in self.cache or not cache:
-            while True:
-                # Wait until rate limit
-                while self.ratelimit_remaining == 0 and self.ratelimit_reset > time.time():
-                    s = self.ratelimit_reset + 5 - time.time()
-                    if s <= 0:
-                        break
-                    print("[gh] rate limit exceeded: waiting until {0} ({1} s remaining)".format(
-                             datetime.datetime.fromtimestamp(self.ratelimit_reset).strftime('%Y-%m-%d %H:%M:%S'),
-                             int(s)),
-                          file=sys.stderr)
-                    time.sleep(min(5*60, s))
 
-                # Get page
-                print("[gh] get:", url, file=sys.stderr)
+        while True:
+            # Wait until rate limit
+            while self.ratelimit_remaining == 0 and self.ratelimit_reset > time.time():
+                s = self.ratelimit_reset + 5 - time.time()
+                if s <= 0:
+                    break
+                print("[gh] rate limit exceeded: waiting until {0} ({1} s remaining)".format(
+                         datetime.datetime.fromtimestamp(self.ratelimit_reset).strftime('%Y-%m-%d %H:%M:%S'),
+                         int(s)),
+                      file=sys.stderr)
+                time.sleep(min(5*60, s))
+
+            # Get page
+            print("[gh] get:", url, file=sys.stderr)
+            try:
                 req = self.urlopen(url)
                 try:
-                    data = json.load(req)
-
-                    if req.getcode() not in (200, 403):
-                        raise RuntimeError()
-
-                    # Parse reply
+                    code = req.getcode()
                     info = dict(req.info())
-                    info['next'] = None
-                    if 'link' in info:
-                        m = re.search('<(.*?)>; rel="next"', info['link'])
-                        if m:
-                            info['next'] = m.group(1)
-
-                    # Update rate limit info
-                    if 'x-ratelimit-remaining' in info:
-                        self.ratelimit_remaining = int(info['x-ratelimit-remaining'])
-                    if 'x-ratelimit-reset' in info:
-                        self.ratelimit_reset = float(info['x-ratelimit-reset'])
-
-                    # Deal with rate limit exceeded
-                    if req.getcode() == 403:
-                        if self.ratelimit_remaining == 0:
-                            continue
-                        else:
-                            raise RuntimeError()
-
-                    # Done.
-                    self.cache[url] = (data, info)
-                    break
+                    data = json.load(req)
                 finally:
                     req.close()
-        else:
-            print("[gh] get (cached):", url, file=sys.stderr)
+            except HTTPError as err:
+                code = err.getcode()
+                info = err.info()
+                data = None
 
-        return self.cache[url]
+            if code not in (200, 403):
+                raise RuntimeError()
 
-    def save(self):
-        print("[gh] saving cache...", file=sys.stderr)
-        fd, tmp = tempfile.mkstemp(prefix=os.path.basename(self.filename) + '.new-',
-                                   dir=os.path.dirname(self.filename))
-        os.close(fd)
-        with open(tmp, 'w') as f:
-            json.dump(self.cache, f)
-        os.rename(tmp, self.filename)
+            # Parse reply
+            info['next'] = None
+            if 'link' in info:
+                m = re.search('<(.*?)>; rel="next"', info['link'])
+                if m:
+                    info['next'] = m.group(1)
+
+            # Update rate limit info
+            if 'x-ratelimit-remaining' in info:
+                self.ratelimit_remaining = int(info['x-ratelimit-remaining'])
+            if 'x-ratelimit-reset' in info:
+                self.ratelimit_reset = float(info['x-ratelimit-reset'])
+
+            # Deal with rate limit exceeded
+            if code != 200 or data is None:
+                if self.ratelimit_remaining == 0:
+                    continue
+                else:
+                    raise RuntimeError()
+
+            # Done.
+            return data, info
 
 
 class LockFile(object):
