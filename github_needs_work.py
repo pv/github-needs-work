@@ -31,9 +31,9 @@ HTML_TEMPLATE = """\
   <title>{{project}} backlog</title>
 </head>
 <body>
-  <h1>Project <a href="https://github.com/{{project}}/pulls">{{project}}</a></h1>
+  <h1>Project <a href="https://github.com/{{project}}/pulls">{{project}}</a> pull requests</h1>
   <p>Updated {{date}}</p>
-  <h2>Pull requests with new commits and older needs-work label</h2>
+  <h2>Updated PRs (new commits but old needs-work label)</h2>
   <ul>
   {{for pull in backlog}}
     <li><a href="{{pull['html_url']}}">gh-{{pull['number']}}</a>: {{pull['title']}}</li>
@@ -42,7 +42,7 @@ HTML_TEMPLATE = """\
     <li>No such pull requests</li>
   {{endif}}
   </ul>
-  <h2>Pull requests needing review</h2>
+  <h2>Needs review</h2>
   <ul>
   {{for pull in needs_review}}
     <li><a href="{{pull['html_url']}}">gh-{{pull['number']}}</a>: {{pull['title']}}</li>
@@ -51,7 +51,7 @@ HTML_TEMPLATE = """\
     <li>No such pull requests</li>
   {{endif}}
   </ul>
-  <h2>Pull requests needing decision</h2>
+  <h2>Needs decision</h2>
   <ul>
   {{for pull in decision}}
     <li><a href="{{pull['html_url']}}">gh-{{pull['number']}}</a>: {{pull['title']}}</li>
@@ -60,7 +60,7 @@ HTML_TEMPLATE = """\
     <li>No such pull requests</li>
   {{endif}}
   </ul>
-  <h2>Other pull requests</h2>
+  <h2>Needs work etc.</h2>
   <ul>
   {{for pull in other}}
     <li><a href="{{pull['html_url']}}">gh-{{pull['number']}}</a>: {{pull['title']}}</li>
