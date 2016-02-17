@@ -213,8 +213,9 @@ class PullCache(object):
 
     def update(self):
         self.cache.setdefault('last_updated', '1970-1-1T00:00:00Z')
+        self.cache.setdefault('pulls', {})
 
-        pulls = self.cache.get('pulls', {})
+        pulls = self.cache['pulls']
 
         # Get changed pull requests
         prev_time = parse_time(self.cache['last_updated'])
@@ -226,8 +227,6 @@ class PullCache(object):
         for pull in new_pulls:
             k = u"{0}".format(pull['number'])
             pulls[k] = pull
-
-        return pulls
 
     def _get(self, since):
         url = "https://api.github.com/repos/{project}/issues?sort=updated&direction=desc&since={since}&state=all"
