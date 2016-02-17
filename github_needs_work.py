@@ -184,13 +184,17 @@ def get_pulls(getter, project, since, cache=True, only_open=False):
     url = "https://api.github.com/repos/{project}/issues?sort=updated&direction=desc&since={since}"
     if only_open:
         url += "&state=open"
+    else:
+        url += "&state=all"
     url = url.format(project=project, since=format_time(since))
 
     data = getter.get_multipage(url, cache=cache)
-    pulls = [pull for pull in data
-             if pull.get('pull_request') and pull.get('state') == 'open']
+    pulls = [pull for pull in data if pull.get('pull_request')]
 
     for pull in pulls:
+        if pull.get('state') != 'open':
+            continue
+
         data, info = getter.get(pull['events_url'], cache=cache)
         pull[u'events'] = data
 
