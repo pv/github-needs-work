@@ -50,6 +50,15 @@ HTML_TEMPLATE = """\
     <li>No such pull requests</li>
   {{endif}}
   </ul>
+  <h2>Pull requests needing decision</h2>
+  <ul>
+  {{for pull in decision}}
+    <li><a href="{{pull['html_url']}}">gh-{{pull['number']}}</a>: {{pull['title']}}</li>
+  {{endfor}}
+  {{if not decision}}
+    <li>No such pull requests</li>
+  {{endif}}
+  </ul>
   <h2>Other pull requests</h2>
   <ul>
   {{for pull in other}}
@@ -85,6 +94,7 @@ def process(getter, project):
         
     backlog = []
     needs_review = []
+    decision = []
     other = []
 
     for pull in sorted(pulls.values(),
@@ -97,6 +107,7 @@ def process(getter, project):
             continue
 
         needs_work = any(label['name'] == 'needs-work' for label in pull['labels'])
+        needs_decision = any(label['name'] == 'needs-decision' for label in pull['labels'])
 
         labelings = [event for event in pull['events']
                      if event['event'] == 'labeled' and event['label']['name'] == 'needs-work']
@@ -113,6 +124,8 @@ def process(getter, project):
                 needs_work_label_date is not None and
                 last_commit_date > needs_work_label_date):
             backlog.append(pull)
+        elif needs_decision:
+            decision.append(pull)
         elif not needs_work:
             needs_review.append(pull)
         else:
@@ -120,6 +133,7 @@ def process(getter, project):
 
     ns = dict(backlog=backlog,
               needs_review=needs_review,
+              decision=decision,
               other=other,
               project=project)
     t = tempita.Template(HTML_TEMPLATE)
