@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # -*- encoding:utf-8 -*-
 """
-gh_lists.py MILESTONE
+github_needs_work.py
 
-Functions for Github API requests.
+Print pull requests in Github which have needs-work label despite having
+updated commits.
+
 """
 from __future__ import print_function, division, absolute_import
 
@@ -67,6 +69,9 @@ def process(getter, project):
     pulls.sort(key=lambda x: x['number'])
 
     for pull in pulls:
+        if not any(label['name'] == 'needs-work' for label in pull['labels']):
+            continue
+
         labelings = [event for event in pull['events']
                      if event['event'] == 'labeled' and event['label']['name'] == 'needs-work']
         if not labelings:
@@ -91,11 +96,13 @@ def get_pulls_cached(getter, project):
     getter.info.setdefault('last_updated', '1970-1-1T00:00:00Z')
 
     # Get old pull requests (may be cached)
-    pulls = get_pulls_needs_work(getter, project, parse_time('1970-1-1T00:00:00Z'))
+    pulls = get_pulls_needs_work(getter, project, parse_time('1970-1-1T00:00:00Z'),
+                                 labeled=True)
 
     # Get new pull requests (update cached ones)
     new_update_time = datetime.datetime.utcnow()
-    new_pulls = get_pulls_needs_work(getter, project, parse_time(getter.info['last_updated']), cache=False)
+    new_pulls = get_pulls_needs_work(getter, project, parse_time(getter.info['last_updated']),
+                                     cache=False, labeled=False)
 
     # Update update time
     getter.info['last_updated'] = format_time(new_update_time)
@@ -110,8 +117,10 @@ def get_pulls_cached(getter, project):
     return pulls
 
 
-def get_pulls_needs_work(getter, project, since, cache=True):
-    url = "https://api.github.com/repos/{project}/issues?state=open&sort=updated&direction=desc&since={since}&labels=needs-work"
+def get_pulls_needs_work(getter, project, since, cache=True, labeled=True):
+    url = "https://api.github.com/repos/{project}/issues?state=open&sort=updated&direction=desc&since={since}"
+    if labeled:
+        url += "&labels=needs-work"
     url = url.format(project=project, since=format_time(since))
 
     data = getter.get_multipage(url, cache=cache)
