@@ -16,6 +16,6 @@ github-needs-work
       --auth             Authenticate to Github (increases rate limits)
 
 Results for `SciPy`_ are provided on an ad-hoc basis at
-https://pav.iki.fi/tmp/scipy-needs-work/
+https://pav.iki.fi/scipy-needs-work/
 
 .. _SciPy: https://github.com/scipy/scipy
