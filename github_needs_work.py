@@ -179,9 +179,9 @@ def process(pull_cache, project, label_needs_work, label_needs_decision, label_n
               champion=champion,
               project=project,
               date=datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
-              label_needs_work=quote(label_needs_work),
-              label_needs_decision=quote(label_needs_decision),
-              label_needs_champion=quote(label_needs_champion)
+              label_needs_work=quote('"{0}"'.format(label_needs_work)),
+              label_needs_decision=quote('"{0}"'.format(label_needs_decision)),
+              label_needs_champion=quote('"{0}"'.format(label_needs_champion))
               )
     t = tempita.Template(HTML_TEMPLATE)
     print(t.substitute(ns))
