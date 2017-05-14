@@ -159,19 +159,37 @@ def process(pull_cache, project, label_needs_work, label_needs_decision, label_n
         if not pull['commits']:
             continue
 
+        # Check labels
         needs_work = any(label['name'] == label_needs_work for label in pull['labels'])
         needs_decision = any(label['name'] == label_needs_decision for label in pull['labels'])
 
+        # Check WIP in title
         if pull['title'].startswith('WIP') or pull['title'].endswith('WIP'):
             needs_work = True
 
+        # Check label addition dates
         labelings = [event for event in pull['events']
                      if event['event'] == 'labeled' and event['label']['name'] == label_needs_work]
         if labelings:
             needs_work_label_date = max(parse_time(event['created_at']) for event in labelings)
         else:
             needs_work_label_date = None
-            
+
+        # Handle reviews
+        if 'reviews' in pull:
+            user_reviews = {}
+            for review in pull['reviews']:
+                uid = review['user']['id']
+                review_date = parse_time(review['submitted_at'])
+                if uid not in user_reviews or user_reviews[uid][1] < review_date:
+                    user_reviews[uid] = (review['state'], review_date)
+            for r_state, r_date in user_reviews.values():
+                if r_state == 'CHANGES_REQUESTED':
+                    if needs_work_label_date is None or needs_work_label_date < r_date:
+                        needs_work = True
+                        needs_work_label_date = r_date
+
+        # Check last commit date
         last_commit_date = max(max(parse_time(commit['commit']['author']['date']),
                                    parse_time(commit['commit']['committer']['date']))
                                for commit in pull['commits'])
