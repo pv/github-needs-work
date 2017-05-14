@@ -314,15 +314,15 @@ class PullCache(object):
             if pull.get('state') != 'open':
                 continue
 
-            data, info = self.getter.get(pull['events_url'])
+            data = self.getter.get_multipage(pull['events_url'])
             pull[u'events'] = data
 
             commits_url = pull['pull_request']['url'] + '/commits'
-            data, info = self.getter.get(commits_url)
+            data = self.getter.get_multipage(commits_url)
             pull[u'commits'] = data
 
-            commits_url = pull['pull_request']['url'] + '/reviews'
-            data, info = self.getter.get(commits_url)
+            reviews_url = pull['pull_request']['url'] + '/reviews'
+            data = self.getter.get_multipage(reviews_url)
             pull[u'reviews'] = data
 
         return pulls
