@@ -121,7 +121,7 @@ def main():
         finally:
             lock.release()
     else:
-        print("Another process already running")
+        print("Another process already running", file=sys.stderr, flush=True)
         return 1
 
     return 0
@@ -277,7 +277,7 @@ class PullCache(object):
 
         if os.path.isfile(filename):
             print("[gh] using {0} as cache (remove it if you want fresh data)".format(filename),
-                  file=sys.stderr)
+                  file=sys.stderr, flush=True)
             with open(filename, 'r', encoding='utf-8') as f:
                 self.cache = json.load(f)
         else:
@@ -328,7 +328,7 @@ class PullCache(object):
         return pulls
 
     def save(self):
-        print("[gh] saving cache...", file=sys.stderr)
+        print("[gh] saving cache...", file=sys.stderr, flush=True)
         fd, tmp = tempfile.mkstemp(prefix=os.path.basename(self.filename) + '.new-',
                                    dir=os.path.dirname(self.filename))
         os.close(fd)
@@ -360,8 +360,8 @@ class GithubGet(object):
         print("Input a Github API access token.\n"
               "Personal tokens can be created at https://github.com/settings/tokens\n"
               "This script does not require any permissions (so don't give it any).",
-              file=sys.stderr)
-        print("Access token: ", file=sys.stderr, end='')
+              file=sys.stderr, flush=True)
+        print("Access token: ", file=sys.stderr, end='', flush=True)
         token = input()
         self.headers['Authorization'] = 'token {0}'.format(token.strip())
 
@@ -388,11 +388,11 @@ class GithubGet(object):
                 print("[gh] rate limit exceeded: waiting until {0} ({1} s remaining)".format(
                          datetime.datetime.fromtimestamp(self.ratelimit_reset).strftime('%Y-%m-%d %H:%M:%S'),
                          int(s)),
-                      file=sys.stderr)
+                      file=sys.stderr, flush=True)
                 time.sleep(min(5*60, s))
 
             # Get page
-            print("[gh] get:", url, file=sys.stderr)
+            print("[gh] get:", url, file=sys.stderr, flush=True)
             try:
                 req = self.urlopen(url)
                 try:
