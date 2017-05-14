@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- encoding:utf-8 -*-
 """
 github_needs_work.py
@@ -8,21 +8,18 @@ having updated commits. Creates a cache file ``gh_cache.json`` in
 the current directory.
 
 """
-from __future__ import print_function, division, absolute_import
 
 import os
 import re
 import sys
 import json
-import base64
 import time
 import datetime
-import collections
 import argparse
 import tempita
 import tempfile
 
-from urllib2 import urlopen, Request, HTTPError, quote
+from urllib.request import urlopen, Request, HTTPError, quote
 
 HTML_TEMPLATE = """\
 <!DOCTYPE html>
@@ -51,7 +48,7 @@ HTML_TEMPLATE = """\
     <li>No such pull requests</li>
   {{endif}}
   </ul>
-  <p>Same as <a href="https://github.com/{{project}}/pulls?q=is%3Apr+is%3Aopen+-label%3A{{label_needs_work}}+-label%3A{{label_needs_decision}}">this github search</a>, with updated PRs and WIPs excluded.</p>
+  <p>Same as <a href="https://github.com/{{project}}/pulls?q=is%3Apr+is%3Aopen+-label%3A{{label_needs_work}}+-label%3A{{label_needs_decision}}">this github search</a>, with updated PRs, WIPs, and review:changes-requested excluded.</p>
   <h2>Needs decision [{{len(decision)}}]</h2>
   <ul>
   {{for pull in decision}}
@@ -71,7 +68,7 @@ HTML_TEMPLATE = """\
     <li>No such pull requests</li>
   {{endif}}
   </ul>
-  <p>Same as <a href="https://github.com/{{project}}/pulls?q=is%3Apr+is%3Aopen+label%3A{{label_needs_work}}+-label%3A{{label_needs_decision}}">this github search</a>, with updated PRs excluded and WIPs included.</p>
+  <p>Same as <a href="https://github.com/{{project}}/pulls?q=is%3Apr+is%3Aopen+label%3A{{label_needs_work}}+-label%3A{{label_needs_decision}}">this</a> and <a href="https://github.com/{{project}}/pulls?q=is%3Apr+is%3Aopen+review%3Achanges-requested+-label%3A{{label_needs_decision}}">this</a> github search, with updated PRs excluded and WIPs included.</p>
   <h2>Needs champion [{{len(champion)}}]</h2>
   <ul>
   {{for pull in champion}}
@@ -261,7 +258,7 @@ class PullCache(object):
         if os.path.isfile(filename):
             print("[gh] using {0} as cache (remove it if you want fresh data)".format(filename),
                   file=sys.stderr)
-            with open(filename, 'r') as f:
+            with open(filename, 'r', encoding='utf-8') as f:
                 self.cache = json.load(f)
         else:
             self.cache = {}
@@ -283,7 +280,7 @@ class PullCache(object):
 
         # Update pulls
         for pull in new_pulls:
-            k = u"{0}".format(pull['number'])
+            k = "{0}".format(pull['number'])
             pulls[k] = pull
 
     def _get(self, since):
@@ -304,6 +301,10 @@ class PullCache(object):
             data, info = self.getter.get(commits_url)
             pull[u'commits'] = data
 
+            commits_url = pull['pull_request']['url'] + '/reviews'
+            data, info = self.getter.get(commits_url)
+            pull[u'reviews'] = data
+
         return pulls
 
     def save(self):
@@ -311,7 +312,7 @@ class PullCache(object):
         fd, tmp = tempfile.mkstemp(prefix=os.path.basename(self.filename) + '.new-',
                                    dir=os.path.dirname(self.filename))
         os.close(fd)
-        with open(tmp, 'w') as f:
+        with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(self.cache, f)
         os.rename(tmp, self.filename)
 
@@ -327,7 +328,7 @@ class GithubGet(object):
         try:
             if req.getcode() != 200:
                 raise RuntimeError()
-            info = json.loads(req.read())
+            info = json.loads(req.read().decode('utf-8'))
         finally:
             req.close()
 
@@ -340,7 +341,7 @@ class GithubGet(object):
               "This script does not require any permissions (so don't give it any).",
               file=sys.stderr)
         print("Access token: ", file=sys.stderr, end='')
-        token = raw_input()
+        token = input()
         self.headers['Authorization'] = 'token {0}'.format(token.strip())
 
     def urlopen(self, url, auth=None):
@@ -353,12 +354,10 @@ class GithubGet(object):
         while url:
             page_data, info = self.get(url)
             data += page_data
-            url = info['next']
+            url = info['Next']
         return data
 
     def get(self, url):
-        url = unicode(url)
-
         while True:
             # Wait until rate limit
             while self.ratelimit_remaining == 0 and self.ratelimit_reset > time.time():
@@ -378,7 +377,7 @@ class GithubGet(object):
                 try:
                     code = req.getcode()
                     info = dict(req.info())
-                    data = json.load(req)
+                    data = json.loads(req.read().decode('utf-8'))
                 finally:
                     req.close()
             except HTTPError as err:
@@ -390,17 +389,17 @@ class GithubGet(object):
                 raise RuntimeError()
 
             # Parse reply
-            info['next'] = None
-            if 'link' in info:
-                m = re.search('<(.*?)>; rel="next"', info['link'])
+            info['Next'] = None
+            if 'Link' in info:
+                m = re.search('<(.*?)>; rel="next"', info['Link'])
                 if m:
-                    info['next'] = m.group(1)
+                    info['Next'] = m.group(1)
 
             # Update rate limit info
-            if 'x-ratelimit-remaining' in info:
-                self.ratelimit_remaining = int(info['x-ratelimit-remaining'])
-            if 'x-ratelimit-reset' in info:
-                self.ratelimit_reset = float(info['x-ratelimit-reset'])
+            if 'X-RateLimit-Remaining' in info:
+                self.ratelimit_remaining = int(info['X-RateLimit-Remaining'])
+            if 'X-RateLimit-Reset' in info:
+                self.ratelimit_reset = float(info['X-RateLimit-Reset'])
 
             # Deal with rate limit exceeded
             if code != 200 or data is None:
