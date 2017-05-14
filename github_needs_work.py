@@ -179,6 +179,8 @@ def process(pull_cache, project, label_needs_work, label_needs_decision, label_n
         if 'reviews' in pull:
             user_reviews = {}
             for review in pull['reviews']:
+                if review['state'] not in ('APPROVED', 'CHANGES_REQUESTED'):
+                    continue
                 uid = review['user']['id']
                 review_date = parse_time(review['submitted_at'])
                 if uid not in user_reviews or user_reviews[uid][1] < review_date:
