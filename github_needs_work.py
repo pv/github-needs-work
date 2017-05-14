@@ -412,7 +412,7 @@ class GithubGet(object):
             # Parse reply
             info['Next'] = None
             if 'Link' in info:
-                m = re.search('<(.*?)>; rel="next"', info['Link'])
+                m = re.search('<([^<>]*)>; rel="next"', info['Link'])
                 if m:
                     info['Next'] = m.group(1)
 
