@@ -339,7 +339,8 @@ class PullCache(object):
 
 class GithubGet(object):
     def __init__(self, auth=False):
-        self.headers = {'User-Agent': 'github_needs_work.py'}
+        self.headers = {'User-Agent': 'github_needs_work.py',
+                        'Accept': 'application/vnd.github.v3+json'}
 
         if auth:
             self.authenticate()
