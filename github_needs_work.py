@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# -*- encoding:utf-8 -*-
+# -*- coding:utf-8; mode:python; eval: (blacken-mode) -*-
 """
 github_needs_work.py
 
@@ -99,23 +99,33 @@ HTML_TEMPLATE = """\
 
 def main():
     p = argparse.ArgumentParser(usage=__doc__.lstrip())
-    p.add_argument('--project', default='scipy/scipy')
-    p.add_argument('--auth', action='store_true',
-                   help="Authenticate to Github (increases rate limits)")
-    p.add_argument('--label-needs-work', default='needs-work')
-    p.add_argument('--label-needs-decision', default='needs-decision')
-    p.add_argument('--label-needs-champion', default='needs-champion')
-    p.add_argument('--label-needs-backport', default='backport-candidate')
+    p.add_argument("--project", default="scipy/scipy")
+    p.add_argument(
+        "--auth",
+        action="store_true",
+        help="Authenticate to Github (increases rate limits)",
+    )
+    p.add_argument("--label-needs-work", default="needs-work")
+    p.add_argument("--label-needs-decision", default="needs-decision")
+    p.add_argument("--label-needs-champion", default="needs-champion")
+    p.add_argument("--label-needs-backport", default="backport-candidate")
     args = p.parse_args()
 
-    lock = LockFile('gh_cache.json.lock')
+    lock = LockFile("gh_cache.json.lock")
 
     if lock.acquire(block=False):
         try:
             getter = GithubGet(auth=args.auth)
-            pull_cache = PullCache('gh_cache.json', args.project, getter)
+            pull_cache = PullCache("gh_cache.json", args.project, getter)
             try:
-                process(pull_cache, args.project, args.label_needs_work, args.label_needs_decision, args.label_needs_champion, args.label_needs_backport)
+                process(
+                    pull_cache,
+                    args.project,
+                    args.label_needs_work,
+                    args.label_needs_decision,
+                    args.label_needs_champion,
+                    args.label_needs_backport,
+                )
             finally:
                 pull_cache.save()
         finally:
@@ -127,8 +137,14 @@ def main():
     return 0
 
 
-def process(pull_cache, project, label_needs_work, label_needs_decision, label_needs_champion,
-            label_needs_backport):
+def process(
+    pull_cache,
+    project,
+    label_needs_work,
+    label_needs_decision,
+    label_needs_champion,
+    label_needs_backport,
+):
     pull_cache.update()
     pulls = pull_cache.values()
 
@@ -139,66 +155,82 @@ def process(pull_cache, project, label_needs_work, label_needs_decision, label_n
     champion = []
     backport = []
 
-    for pull in sorted(pulls,
-                       key=lambda x: parse_time(x['created_at']),
-                       reverse=True):
+    for pull in sorted(pulls, key=lambda x: parse_time(x["created_at"]), reverse=True):
 
-        needs_champion = any(label['name'] == label_needs_champion for label in pull['labels'])
+        needs_champion = any(
+            label["name"] == label_needs_champion for label in pull["labels"]
+        )
         if needs_champion:
             champion.append(pull)
             continue
 
-        needs_backport = any(label['name'] == label_needs_backport for label in pull['labels'])
+        needs_backport = any(
+            label["name"] == label_needs_backport for label in pull["labels"]
+        )
         if needs_backport:
             backport.append(pull)
             continue
 
-        if pull['state'] != 'open':
+        if pull["state"] != "open":
             continue
 
-        if not pull['commits']:
+        if not pull["commits"]:
             continue
 
         # Check labels
-        needs_work = any(label['name'] == label_needs_work for label in pull['labels'])
-        needs_decision = any(label['name'] == label_needs_decision for label in pull['labels'])
+        needs_work = any(label["name"] == label_needs_work for label in pull["labels"])
+        needs_decision = any(
+            label["name"] == label_needs_decision for label in pull["labels"]
+        )
 
         # Check WIP in title
-        if pull['title'].startswith('WIP') or pull['title'].endswith('WIP'):
+        if pull["title"].startswith("WIP") or pull["title"].endswith("WIP"):
             needs_work = True
 
         # Check label addition dates
-        labelings = [event for event in pull['events']
-                     if event['event'] == 'labeled' and event['label']['name'] == label_needs_work]
+        labelings = [
+            event
+            for event in pull["events"]
+            if event["event"] == "labeled"
+            and event["label"]["name"] == label_needs_work
+        ]
         if labelings:
-            needs_work_label_date = max(parse_time(event['created_at']) for event in labelings)
+            needs_work_label_date = max(
+                parse_time(event["created_at"]) for event in labelings
+            )
         else:
             needs_work_label_date = None
 
         # Handle reviews
-        if 'reviews' in pull:
+        if "reviews" in pull:
             user_reviews = {}
-            for review in pull['reviews']:
-                if review['state'] not in ('APPROVED', 'CHANGES_REQUESTED'):
+            for review in pull["reviews"]:
+                if review["state"] not in ("APPROVED", "CHANGES_REQUESTED"):
                     continue
-                uid = review['user']['id']
-                review_date = parse_time(review['submitted_at'])
+                uid = review["user"]["id"]
+                review_date = parse_time(review["submitted_at"])
                 if uid not in user_reviews or user_reviews[uid][1] < review_date:
-                    user_reviews[uid] = (review['state'], review_date)
+                    user_reviews[uid] = (review["state"], review_date)
             for r_state, r_date in user_reviews.values():
-                if r_state == 'CHANGES_REQUESTED':
+                if r_state == "CHANGES_REQUESTED":
                     if needs_work_label_date is None or needs_work_label_date < r_date:
                         needs_work = True
                         needs_work_label_date = r_date
 
         # Check last commit date
-        last_commit_date = max(max(parse_time(commit['commit']['author']['date']),
-                                   parse_time(commit['commit']['committer']['date']))
-                               for commit in pull['commits'])
+        last_commit_date = max(
+            max(
+                parse_time(commit["commit"]["author"]["date"]),
+                parse_time(commit["commit"]["committer"]["date"]),
+            )
+            for commit in pull["commits"]
+        )
 
-        if (needs_work and
-                needs_work_label_date is not None and
-                last_commit_date > needs_work_label_date):
+        if (
+            needs_work
+            and needs_work_label_date is not None
+            and last_commit_date > needs_work_label_date
+        ):
             backlog.append(pull)
         elif needs_decision:
             decision.append(pull)
@@ -207,58 +239,63 @@ def process(pull_cache, project, label_needs_work, label_needs_decision, label_n
         else:
             other.append(pull)
 
-    ns = dict(backlog=backlog,
-              needs_review=needs_review,
-              decision=decision,
-              other=other,
-              champion=champion,
-              backport=backport,
-              project=project,
-              date=datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
-              label_needs_work=quote('"{0}"'.format(label_needs_work)),
-              label_needs_decision=quote('"{0}"'.format(label_needs_decision)),
-              label_needs_champion=quote('"{0}"'.format(label_needs_champion)),
-              label_needs_backport=quote('"{0}"'.format(label_needs_backport))
-              )
+    ns = dict(
+        backlog=backlog,
+        needs_review=needs_review,
+        decision=decision,
+        other=other,
+        champion=champion,
+        backport=backport,
+        project=project,
+        date=datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+        label_needs_work=quote('"{0}"'.format(label_needs_work)),
+        label_needs_decision=quote('"{0}"'.format(label_needs_decision)),
+        label_needs_champion=quote('"{0}"'.format(label_needs_champion)),
+        label_needs_backport=quote('"{0}"'.format(label_needs_backport)),
+    )
     t = tempita.Template(HTML_TEMPLATE)
     print(t.substitute(ns))
 
 
 def format_time(d):
-    return d.strftime('%Y-%m-%dT%H:%M:%SZ')
+    return d.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def parse_time(s):
     """Parse a time string and convert to UTC"""
 
     # UTC time format
-    if s.endswith('Z'):
-        return datetime.datetime.strptime(s, '%Y-%m-%dT%H:%M:%SZ')
+    if s.endswith("Z"):
+        return datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ")
 
     # US time format
-    m = re.match(r'^([0-9]+)/([0-9]+)/([0-9]+)\s*([0-9]+:[0-9]+:[0-9]+)\s*([+-][0-9][0-9][0-9][0-9])\s*$', s)
+    m = re.match(
+        r"^([0-9]+)/([0-9]+)/([0-9]+)\s*([0-9]+:[0-9]+:[0-9]+)\s*([+-][0-9][0-9][0-9][0-9])\s*$",
+        s,
+    )
     if m:
-        s = "%s-%s-%sT%s%s:%s" % (m.group(1), m.group(2), m.group(3),
-                                  m.group(4), m.group(5)[:-2], m.group(5)[-2:])
+        s = "%s-%s-%sT%s%s:%s" % (
+            m.group(1),
+            m.group(2),
+            m.group(3),
+            m.group(4),
+            m.group(5)[:-2],
+            m.group(5)[-2:],
+        )
 
     # TZ time format
-    m = re.search(r'([+-])([0-9]+):([0-9]+)$', s)
+    m = re.search(r"([+-])([0-9]+):([0-9]+)$", s)
     if m:
-        t = datetime.datetime.strptime(s[:m.start()], '%Y-%m-%dT%H:%M:%S')
-        dt = datetime.timedelta(hours=int(m.group(2)),
-                                minutes=int(m.group(3)))
-        if m.group(1) == '+':
+        t = datetime.datetime.strptime(s[: m.start()], "%Y-%m-%dT%H:%M:%S")
+        dt = datetime.timedelta(hours=int(m.group(2)), minutes=int(m.group(3)))
+        if m.group(1) == "+":
             t -= dt
         else:
             t += dt
         return t
 
     # Fallbacks
-    fmts = ["%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d %H:%M",
-            "%Y-%m-%d",
-            "%Y-%m",
-            "%Y"]
+    fmts = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%Y-%m", "%Y"]
     for fmt in fmts:
         try:
             return datetime.datetime.strptime(s, fmt)
@@ -276,31 +313,36 @@ class PullCache(object):
         self.getter = getter
 
         if os.path.isfile(filename):
-            print("[gh] using {0} as cache (remove it if you want fresh data)".format(filename),
-                  file=sys.stderr, flush=True)
-            with open(filename, 'r', encoding='utf-8') as f:
+            print(
+                "[gh] using {0} as cache (remove it if you want fresh data)".format(
+                    filename
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+            with open(filename, "r", encoding="utf-8") as f:
                 self.cache = json.load(f)
         else:
             self.cache = {}
 
     def values(self):
-        return self.cache['pulls'].values()
+        return self.cache["pulls"].values()
 
     def update(self):
-        self.cache.setdefault('last_updated', '1970-1-1T00:00:00Z')
-        self.cache.setdefault('pulls', {})
+        self.cache.setdefault("last_updated", "1970-1-1T00:00:00Z")
+        self.cache.setdefault("pulls", {})
 
-        pulls = self.cache['pulls']
+        pulls = self.cache["pulls"]
 
         # Get changed pull requests
-        prev_time = parse_time(self.cache['last_updated'])
+        prev_time = parse_time(self.cache["last_updated"])
         new_time = datetime.datetime.utcnow()
         new_pulls = self._get(prev_time)
-        self.cache['last_updated'] = format_time(new_time)
+        self.cache["last_updated"] = format_time(new_time)
 
         # Update pulls
         for pull in new_pulls:
-            k = "{0}".format(pull['number'])
+            k = "{0}".format(pull["number"])
             pulls[k] = pull
 
     def _get(self, since):
@@ -308,65 +350,72 @@ class PullCache(object):
         url = url.format(project=self.project, since=format_time(since))
 
         data = self.getter.get_multipage(url)
-        pulls = [pull for pull in data if pull.get('pull_request')]
+        pulls = [pull for pull in data if pull.get("pull_request")]
 
         for pull in pulls:
-            if pull.get('state') != 'open':
+            if pull.get("state") != "open":
                 continue
 
-            data = self.getter.get_multipage(pull['events_url'])
-            pull[u'events'] = data
+            data = self.getter.get_multipage(pull["events_url"])
+            pull[u"events"] = data
 
-            commits_url = pull['pull_request']['url'] + '/commits'
+            commits_url = pull["pull_request"]["url"] + "/commits"
             data = self.getter.get_multipage(commits_url)
-            pull[u'commits'] = data
+            pull[u"commits"] = data
 
-            reviews_url = pull['pull_request']['url'] + '/reviews'
+            reviews_url = pull["pull_request"]["url"] + "/reviews"
             data = self.getter.get_multipage(reviews_url)
-            pull[u'reviews'] = data
+            pull[u"reviews"] = data
 
         return pulls
 
     def save(self):
         print("[gh] saving cache...", file=sys.stderr, flush=True)
-        fd, tmp = tempfile.mkstemp(prefix=os.path.basename(self.filename) + '.new-',
-                                   dir=os.path.dirname(self.filename))
+        fd, tmp = tempfile.mkstemp(
+            prefix=os.path.basename(self.filename) + ".new-",
+            dir=os.path.dirname(self.filename),
+        )
         os.close(fd)
-        with open(tmp, 'w', encoding='utf-8') as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(self.cache, f)
         os.rename(tmp, self.filename)
 
 
 class GithubGet(object):
     def __init__(self, auth=False):
-        self.headers = {'User-Agent': 'github_needs_work.py',
-                        'Accept': 'application/vnd.github.v3+json'}
+        self.headers = {
+            "User-Agent": "github_needs_work.py",
+            "Accept": "application/vnd.github.v3+json",
+        }
 
         if auth:
             self.authenticate()
 
-        req = self.urlopen('https://api.github.com/rate_limit')
+        req = self.urlopen("https://api.github.com/rate_limit")
         try:
             if req.getcode() != 200:
                 raise RuntimeError()
-            info = json.loads(req.read().decode('utf-8'))
+            info = json.loads(req.read().decode("utf-8"))
         finally:
             req.close()
 
-        self.ratelimit_remaining = int(info['rate']['remaining'])
-        self.ratelimit_reset = float(info['rate']['reset'])
+        self.ratelimit_remaining = int(info["rate"]["remaining"])
+        self.ratelimit_reset = float(info["rate"]["reset"])
 
     def authenticate(self):
-        print("Input a Github API access token.\n"
-              "Personal tokens can be created at https://github.com/settings/tokens\n"
-              "This script does not require any permissions (so don't give it any).",
-              file=sys.stderr, flush=True)
-        print("Access token: ", file=sys.stderr, end='', flush=True)
+        print(
+            "Input a Github API access token.\n"
+            "Personal tokens can be created at https://github.com/settings/tokens\n"
+            "This script does not require any permissions (so don't give it any).",
+            file=sys.stderr,
+            flush=True,
+        )
+        print("Access token: ", file=sys.stderr, end="", flush=True)
         token = input()
-        self.headers['Authorization'] = 'token {0}'.format(token.strip())
+        self.headers["Authorization"] = "token {0}".format(token.strip())
 
     def urlopen(self, url, auth=None):
-        assert url.startswith('https://')
+        assert url.startswith("https://")
         req = Request(url, headers=self.headers)
         return urlopen(req, timeout=60)
 
@@ -375,7 +424,7 @@ class GithubGet(object):
         while url:
             page_data, info = self.get(url)
             data += page_data
-            url = info['Next']
+            url = info["Next"]
         return data
 
     def get(self, url):
@@ -385,11 +434,17 @@ class GithubGet(object):
                 s = self.ratelimit_reset + 5 - time.time()
                 if s <= 0:
                     break
-                print("[gh] rate limit exceeded: waiting until {0} ({1} s remaining)".format(
-                         datetime.datetime.fromtimestamp(self.ratelimit_reset).strftime('%Y-%m-%d %H:%M:%S'),
-                         int(s)),
-                      file=sys.stderr, flush=True)
-                time.sleep(min(5*60, s))
+                print(
+                    "[gh] rate limit exceeded: waiting until {0} ({1} s remaining)".format(
+                        datetime.datetime.fromtimestamp(self.ratelimit_reset).strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        ),
+                        int(s),
+                    ),
+                    file=sys.stderr,
+                    flush=True,
+                )
+                time.sleep(min(5 * 60, s))
 
             # Get page
             print("[gh] get:", url, file=sys.stderr, flush=True)
@@ -398,7 +453,7 @@ class GithubGet(object):
                 try:
                     code = req.getcode()
                     info = dict(req.info())
-                    data = json.loads(req.read().decode('utf-8'))
+                    data = json.loads(req.read().decode("utf-8"))
                 finally:
                     req.close()
             except HTTPError as err:
@@ -410,17 +465,17 @@ class GithubGet(object):
                 raise RuntimeError()
 
             # Parse reply
-            info['Next'] = None
-            if 'Link' in info:
-                m = re.search('<([^<>]*)>; rel="next"', info['Link'])
+            info["Next"] = None
+            if "Link" in info:
+                m = re.search('<([^<>]*)>; rel="next"', info["Link"])
                 if m:
-                    info['Next'] = m.group(1)
+                    info["Next"] = m.group(1)
 
             # Update rate limit info
-            if 'X-RateLimit-Remaining' in info:
-                self.ratelimit_remaining = int(info['X-RateLimit-Remaining'])
-            if 'X-RateLimit-Reset' in info:
-                self.ratelimit_reset = float(info['X-RateLimit-Reset'])
+            if "X-RateLimit-Remaining" in info:
+                self.ratelimit_remaining = int(info["X-RateLimit-Remaining"])
+            if "X-RateLimit-Reset" in info:
+                self.ratelimit_reset = float(info["X-RateLimit-Reset"])
 
             # Deal with rate limit exceeded
             if code != 200 or data is None:
@@ -455,9 +510,9 @@ class LockFile(object):
         while True:
             try:
                 lock_pid = os.readlink(self.filename)
-                if not os.path.isdir('/proc/%s' % lock_pid):
+                if not os.path.isdir("/proc/%s" % lock_pid):
                     # dead lock; delete under lock to avoid races
-                    sublock = LockFile(self.filename + '.lock')
+                    sublock = LockFile(self.filename + ".lock")
                     sublock.acquire()
                     try:
                         os.unlink(self.filename)
@@ -470,7 +525,8 @@ class LockFile(object):
                 os.symlink(repr(self.pid), self.filename)
                 break
             except OSError as exc:
-                if exc.errno != 17: raise
+                if exc.errno != 17:
+                    raise
 
             if not block:
                 return False
@@ -484,7 +540,7 @@ class LockFile(object):
             if os.path.islink(self.filename):
                 os.unlink(self.filename)
         elif self.count < 1:
-            raise RuntimeError('Invalid lock nesting')
+            raise RuntimeError("Invalid lock nesting")
         self.count -= 1
 
 
