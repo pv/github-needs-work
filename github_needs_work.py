@@ -156,6 +156,7 @@ def process(
     backport = []
 
     for pull in sorted(pulls, key=lambda x: parse_time(x["created_at"]), reverse=True):
+        pull = dict(pull)
 
         needs_champion = any(
             label["name"] == label_needs_champion for label in pull["labels"]
@@ -185,6 +186,11 @@ def process(
 
         # Check WIP in title
         if pull["title"].startswith("WIP") or pull["title"].endswith("WIP"):
+            needs_work = True
+
+        # Check draft status
+        if pull.get("draft"):
+            pull["title"] = "(Draft) " + pull["title"]
             needs_work = True
 
         # Check label addition dates
@@ -367,6 +373,13 @@ class PullCache(object):
             data = self.getter.get_multipage(reviews_url)
             pull[u"reviews"] = data
 
+            # Merge with direct pull data which has a few additional keys
+            pull_url = pull["pull_request"]["url"]
+            data, info = self.getter.get(pull_url)
+
+            data.update(pull)
+            pull.update(data)
+
         return pulls
 
     def save(self):
@@ -385,7 +398,7 @@ class GithubGet(object):
     def __init__(self, auth=False):
         self.headers = {
             "User-Agent": "github_needs_work.py",
-            "Accept": "application/vnd.github.v3+json",
+            "Accept": "application/vnd.github.shadow-cat-preview+json, application/vnd.github.v3+json",
         }
 
         if auth:
