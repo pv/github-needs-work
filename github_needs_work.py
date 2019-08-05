@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8; mode:python; eval: (blacken-mode) -*-
-"""
-github_needs_work.py
+"""github_needs_work.py
 
 Print pull requests in Github which have needs-work label despite
-having updated commits. Creates a cache file ``gh_cache.json`` in
-the current directory.
+having updated commits. Creates a cache file ``gh_cache.json`` in the
+current directory. The script also understands Github PR review and
+draft statuses, and interprets "changes requested" as "needs-work".
+
+examples:
+  %(prog)s --auth --project scipy/scipy < token > out.html
 
 """
 
@@ -99,16 +102,34 @@ HTML_TEMPLATE = """\
 
 def main():
     p = argparse.ArgumentParser(usage=__doc__.lstrip())
-    p.add_argument("--project", default="scipy/scipy")
+    p.add_argument(
+        "--project", default="scipy/scipy", help="project to use (e.g. scipy/scipy)"
+    )
     p.add_argument(
         "--auth",
         action="store_true",
-        help="Authenticate to Github (increases rate limits)",
+        help="authenticate to Github (increases rate limits)",
     )
-    p.add_argument("--label-needs-work", default="needs-work")
-    p.add_argument("--label-needs-decision", default="needs-decision")
-    p.add_argument("--label-needs-champion", default="needs-champion")
-    p.add_argument("--label-needs-backport", default="backport-candidate")
+    p.add_argument(
+        "--label-needs-work",
+        default="needs-work",
+        help="name of the label for 'needs-work' status (default: needs-work)",
+    )
+    p.add_argument(
+        "--label-needs-decision",
+        default="needs-decision",
+        help="name of the label for 'needs-decision' status (default: needs-decision)",
+    )
+    p.add_argument(
+        "--label-needs-champion",
+        default="needs-champion",
+        help="name of the label for 'needs-champion' status (default: needs-champion)",
+    )
+    p.add_argument(
+        "--label-needs-backport",
+        default="backport-candidate",
+        help="name of the label for 'needs-backport' status (default: backport-candidate)",
+    )
     args = p.parse_args()
 
     lock = LockFile("gh_cache.json.lock")
