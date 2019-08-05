@@ -2,10 +2,16 @@
 # -*- coding:utf-8; mode:python; eval: (blacken-mode) -*-
 """github_needs_work.py
 
-Print pull requests in Github which have needs-work label despite
-having updated commits. Creates a cache file ``gh_cache.json`` in the
-current directory. The script also understands Github PR review and
-draft statuses, and interprets "changes requested" as "needs-work".
+List pull requests in a Github project, categorized to those
+unreviewed, those waiting PR submitter action (needs-work, wip/draft),
+and those updated since last review (potentially needing further
+review). Additional categories include abandoned and closed PRs
+(needs-champion) and backportable PRs (needs-backport).
+
+Creates a cache file ``gh_cache.json`` in the current directory. The
+script understands Github PR review and draft statuses in addition to
+manually assigned labels, interpreting "changes requested" as
+"needs-work".
 
 examples:
   %(prog)s --auth --project scipy/scipy < token > out.html
