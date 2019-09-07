@@ -195,7 +195,7 @@ def process(
         needs_backport = any(
             label["name"] == label_needs_backport for label in pull["labels"]
         )
-        if needs_backport:
+        if needs_backport and pull.get("state") != "open":
             backport.append(pull)
             continue
 
