@@ -402,7 +402,7 @@ class PullCache(object):
 
             # Merge with direct pull data which has a few additional keys
             pull_url = pull["pull_request"]["url"]
-            data, info = self.getter.get(pull_url)
+            data, info, _ = self.getter.get(pull_url)
 
             data.update(pull)
             pull.update(data)
